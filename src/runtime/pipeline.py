@@ -4,16 +4,32 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.audit.audit_logger import DEFAULT_AUDIT_PATH, build_audit_event, write_audit_event
+from src.explanation.explainer import explain_answer
 from src.runtime.executor import DEFAULT_DB_PATH, execute_sql
 from src.runtime.router import route_question
 from src.templates.template_loader import get_template, render_template_sql
 from src.validation.validators import validate_result
 
 
+def _attach_audit(response: dict, question: str, audit_path: Path) -> dict:
+    """Write audit event and attach audit fields to response in-place."""
+    try:
+        event = build_audit_event(question, response)
+        write_audit_event(event, audit_path=audit_path)
+        response["audit_logged"] = True
+        response["audit_path"] = str(audit_path)
+    except Exception as exc:  # noqa: BLE001
+        response["audit_logged"] = False
+        response["audit_error"] = str(exc)
+    return response
+
+
 def answer_question(
     question: str,
     parameters: dict | None = None,
     db_path: Path = DEFAULT_DB_PATH,
+    audit_path: Path = DEFAULT_AUDIT_PATH,
 ) -> dict:
     """Answer a supported analytics question end-to-end.
 
@@ -23,7 +39,9 @@ def answer_question(
        (caller parameters take precedence).
     3. Render SQL via the template loader.
     4. Execute against DuckDB.
-    5. Return a structured response.
+    5. Explain the answer deterministically.
+    6. Write an audit event.
+    7. Return a structured response.
 
     Returns a dict with keys:
         status: "ok" | "clarify" | "unsupported" | "error"
@@ -36,12 +54,16 @@ def answer_question(
         assumptions: list[str]
         validation_status: str
         reason: str | None
+        explanation: dict
+        audit_logged: bool
+        audit_path: str  (present when audit_logged is True)
+        audit_error: str  (present when audit_logged is False)
     """
     route = route_question(question)
     route_type = route["route_type"]
 
     if route_type == "clarify":
-        return {
+        response = {
             "status": "clarify",
             "route_type": route_type,
             "template_id": None,
@@ -54,9 +76,11 @@ def answer_question(
             "validation": None,
             "reason": route["reason"],
         }
+        response["explanation"] = explain_answer(response)
+        return _attach_audit(response, question, audit_path)
 
     if route_type == "unsupported":
-        return {
+        response = {
             "status": "unsupported",
             "route_type": route_type,
             "template_id": None,
@@ -69,6 +93,8 @@ def answer_question(
             "validation": None,
             "reason": route["reason"],
         }
+        response["explanation"] = explain_answer(response)
+        return _attach_audit(response, question, audit_path)
 
     template_id = route["template_id"]
     merged_params = {**route["extracted_parameters"], **(parameters or {})}
@@ -81,7 +107,7 @@ def answer_question(
 
     validation = validate_result(template_id, rows, merged_params)
 
-    return {
+    response = {
         "status": "ok",
         "route_type": route_type,
         "template_id": template_id,
@@ -94,3 +120,5 @@ def answer_question(
         "validation": validation,
         "reason": route["reason"],
     }
+    response["explanation"] = explain_answer(response)
+    return _attach_audit(response, question, audit_path)

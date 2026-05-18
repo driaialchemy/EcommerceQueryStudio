@@ -258,3 +258,103 @@ def test_pipeline_executes_monthly_revenue_trend():
     assert result["template_id"] == "monthly_revenue_trend"
     assert isinstance(result["rows"], list)
     assert result["row_count"] > 0
+
+
+# ---------------------------------------------------------------------------
+# Stage 8: explanation and audit logging
+# ---------------------------------------------------------------------------
+
+
+def test_pipeline_ok_response_includes_explanation(monkeypatch, tmp_path):
+    monkeypatch.setattr("src.runtime.pipeline.render_template_sql", lambda tid, params, **kw: "SELECT 1")
+    monkeypatch.setattr("src.runtime.pipeline.execute_sql", lambda sql, db_path=None: [])
+    result = answer_question(
+        "Show conversion rate by channel",
+        audit_path=tmp_path / "audit.jsonl",
+    )
+    assert "explanation" in result
+    assert isinstance(result["explanation"], dict)
+    for key in ("summary", "method", "assumptions", "validation_summary", "limitations"):
+        assert key in result["explanation"]
+
+
+def test_pipeline_ok_response_audit_logged(monkeypatch, tmp_path):
+    monkeypatch.setattr("src.runtime.pipeline.render_template_sql", lambda tid, params, **kw: "SELECT 1")
+    monkeypatch.setattr("src.runtime.pipeline.execute_sql", lambda sql, db_path=None: [])
+    audit_path = tmp_path / "audit.jsonl"
+    result = answer_question(
+        "Show conversion rate by channel",
+        audit_path=audit_path,
+    )
+    assert result["audit_logged"] is True
+    assert audit_path.exists()
+
+
+def test_pipeline_ok_response_audit_logged_true_includes_path(monkeypatch, tmp_path):
+    monkeypatch.setattr("src.runtime.pipeline.render_template_sql", lambda tid, params, **kw: "SELECT 1")
+    monkeypatch.setattr("src.runtime.pipeline.execute_sql", lambda sql, db_path=None: [])
+    audit_path = tmp_path / "audit.jsonl"
+    result = answer_question(
+        "Show conversion rate by channel",
+        audit_path=audit_path,
+    )
+    assert result["audit_logged"] is True
+    assert "audit_path" in result
+
+
+def test_pipeline_clarify_includes_explanation(tmp_path):
+    result = answer_question(
+        "Which is the best channel?",
+        audit_path=tmp_path / "audit.jsonl",
+    )
+    assert result["status"] == "clarify"
+    assert "explanation" in result
+    assert result["sql"] is None
+    assert result["rows"] is None
+
+
+def test_pipeline_clarify_audit_logged(tmp_path):
+    audit_path = tmp_path / "audit.jsonl"
+    result = answer_question(
+        "Which is the best channel?",
+        audit_path=audit_path,
+    )
+    assert result["audit_logged"] is True
+    assert audit_path.exists()
+
+
+def test_pipeline_unsupported_includes_explanation(tmp_path):
+    result = answer_question(
+        "How many employees do we have?",
+        audit_path=tmp_path / "audit.jsonl",
+    )
+    assert result["status"] == "unsupported"
+    assert "explanation" in result
+    assert result["sql"] is None
+    assert result["rows"] is None
+
+
+def test_pipeline_unsupported_audit_logged(tmp_path):
+    audit_path = tmp_path / "audit.jsonl"
+    result = answer_question(
+        "How many employees do we have?",
+        audit_path=audit_path,
+    )
+    assert result["audit_logged"] is True
+    assert audit_path.exists()
+
+
+def test_pipeline_audit_failure_does_not_raise(monkeypatch, tmp_path):
+    monkeypatch.setattr("src.runtime.pipeline.render_template_sql", lambda tid, params, **kw: "SELECT 1")
+    monkeypatch.setattr("src.runtime.pipeline.execute_sql", lambda sql, db_path=None: [])
+
+    def _bad_write(event, audit_path=None):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("src.runtime.pipeline.write_audit_event", _bad_write)
+    result = answer_question(
+        "Show conversion rate by channel",
+        audit_path=tmp_path / "audit.jsonl",
+    )
+    assert result["audit_logged"] is False
+    assert "audit_error" in result
