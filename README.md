@@ -128,9 +128,52 @@ python -m pytest
 - `validate_expected_tables` — raises `ValueError` listing any missing expected tables
 - `build_schema_registry` — returns a dict keyed by table name, each entry containing `table_name`, `grain`, `row_count` (live from DuckDB), `columns`, `allowed_join_keys`, and `dictionary_fields` when available
 
+## Stage 4: Semantic Metric Registry
+
+Metric definitions live in `src/semantic_layer/metrics.yaml` as versioned, governed contracts — not in prompts or ad hoc code.
+
+Each contract specifies the metric ID, version, owner, business definition, grain, base table or component metrics, measure expression or formula, allowed dimensions, required tables, join paths, alignment rules, validation rules, assumptions, and approval status.
+
+The 14 initial MVP metrics are:
+
+| Metric | Grain | Base / Components |
+| --- | --- | --- |
+| `sessions` | session | `website_sessions` |
+| `orders` | order | `orders` |
+| `items_sold` | item | `order_items` |
+| `gross_order_revenue` | order | `orders` |
+| `gross_item_revenue` | item | `order_items` |
+| `gross_profit` | item | `order_items` |
+| `refund_amount` | refund | `order_item_refunds` |
+| `net_revenue_after_refunds` | item | `order_items` + `order_item_refunds` |
+| `conversion_rate` | session | `website_sessions` + `orders` |
+| `revenue_per_session` | session | `website_sessions` + `orders` + `order_items` |
+| `profit_per_session` | session | `website_sessions` + `orders` + `order_items` |
+| `refund_rate` | item | `order_items` + `order_item_refunds` |
+| `average_order_value` | order | `orders` |
+| `items_per_order` | order | `orders` + `order_items` |
+
+`src/semantic_layer/metric_registry.py` provides:
+
+- `load_metric_contracts` — loads all contracts from YAML, keyed by `metric_id`
+- `get_metric` — retrieves one contract by ID, raises `KeyError` if unknown
+- `list_metrics` — returns sorted list of all metric IDs
+- `validate_metric_contract` — validates a single contract dict
+- `validate_all_metric_contracts` — validates the entire YAML file
+- `get_metrics_by_table` — filters metrics by required table
+- `get_metrics_by_grain` — filters metrics by grain
+
+Metric definitions are intentionally separate from prompts. SQL templates will consume these contracts in Stage 5.
+
+To validate all metric contracts:
+
+```bash
+python -m pytest tests/test_metric_registry.py
+```
+
 ## Current Limitations
 
-- No semantic metrics or SQL templates are implemented yet.
+- No SQL templates are implemented yet.
 - No runtime question-answering path exists yet.
 - No Streamlit UI exists yet.
 - No tracing integration exists yet.

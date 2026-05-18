@@ -1,0 +1,380 @@
+version: "1"
+metrics:
+
+  - metric_id: sessions
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Count of distinct website sessions initiated by users.
+      A session is one continuous visit. Do not substitute pageviews for sessions.
+    grain: session
+    base_table: website_sessions
+    measure: "COUNT(DISTINCT website_session_id)"
+    time_field: created_at
+    allowed_dimensions:
+      - utm_source
+      - utm_campaign
+      - utm_content
+      - device_type
+      - http_referer
+      - is_repeat_session
+    required_tables:
+      - website_sessions
+    validation_rules:
+      - Sessions must be counted from website_sessions, never from website_pageviews.
+      - Distinct count required to prevent duplication.
+    assumptions:
+      - website_sessions.website_session_id is the canonical session identifier.
+
+  - metric_id: orders
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Count of distinct completed orders placed by customers.
+    grain: order
+    base_table: orders
+    measure: "COUNT(DISTINCT order_id)"
+    time_field: created_at
+    allowed_dimensions:
+      - primary_product_id
+      - items_purchased
+    required_tables:
+      - orders
+    validation_rules:
+      - Orders must be counted from the orders table only.
+      - Do not derive order counts from order_items to avoid item-level fan-out.
+    assumptions:
+      - orders.order_id is the canonical order identifier.
+      - All rows in orders represent completed, non-cancelled orders unless filtered.
+
+  - metric_id: items_sold
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Count of individual product items sold across all orders.
+      Each row in order_items represents one sold item.
+    grain: item
+    base_table: order_items
+    measure: "COUNT(order_item_id)"
+    time_field: created_at
+    allowed_dimensions:
+      - product_id
+      - is_primary_item
+    required_tables:
+      - order_items
+    validation_rules:
+      - Count from order_items, not from orders.items_purchased, to support product-level breakdown.
+    assumptions:
+      - order_items.order_item_id is the canonical item identifier.
+
+  - metric_id: gross_order_revenue
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Total revenue at the order level, summed from orders.price_usd.
+      This is the order-header revenue, not the item-level revenue.
+      Use gross_item_revenue for product-level analysis.
+    grain: order
+    base_table: orders
+    measure: "SUM(price_usd)"
+    time_field: created_at
+    allowed_dimensions:
+      - primary_product_id
+    required_tables:
+      - orders
+    validation_rules:
+      - Must use orders.price_usd, not order_items.price_usd.
+      - Do not use this metric for product-level revenue breakdowns.
+    assumptions:
+      - orders.price_usd is the order-header price inclusive of all items in that order.
+      - Refunds are not deducted here; use net_revenue_after_refunds for net figures.
+
+  - metric_id: gross_item_revenue
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Total revenue at the item level, summed from order_items.price_usd.
+      Use this metric for product-level revenue analysis, not gross_order_revenue.
+    grain: item
+    base_table: order_items
+    measure: "SUM(price_usd)"
+    time_field: created_at
+    allowed_dimensions:
+      - product_id
+      - is_primary_item
+    required_tables:
+      - order_items
+    validation_rules:
+      - Must use order_items.price_usd, not orders.price_usd.
+      - gross_item_revenue and gross_order_revenue are distinct metrics and must not be substituted.
+    assumptions:
+      - order_items.price_usd is the per-item selling price.
+      - Refunds are not deducted here; use net_revenue_after_refunds for net figures.
+
+  - metric_id: gross_profit
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Total gross profit at the item level, computed as the difference between
+      item-level price and cost of goods sold, both from order_items.
+    grain: item
+    base_table: order_items
+    measure: "SUM(price_usd - cogs_usd)"
+    time_field: created_at
+    allowed_dimensions:
+      - product_id
+      - is_primary_item
+    required_tables:
+      - order_items
+    validation_rules:
+      - Must use order_items.price_usd and order_items.cogs_usd.
+      - Do not compute gross profit from orders-level columns.
+    assumptions:
+      - order_items.cogs_usd represents the direct cost of the item.
+      - Refunds are not deducted; compute net margin separately if needed.
+
+  - metric_id: refund_amount
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Total dollar value of refunds issued, sourced from order_item_refunds.refund_amount_usd.
+    grain: refund
+    base_table: order_item_refunds
+    measure: "SUM(refund_amount_usd)"
+    time_field: created_at
+    allowed_dimensions:
+      - order_item_id
+    required_tables:
+      - order_item_refunds
+    join_paths:
+      - "order_item_refunds JOIN order_items ON order_item_refunds.order_item_id = order_items.order_item_id"
+      - "order_items JOIN orders ON order_items.order_id = orders.order_id"
+    validation_rules:
+      - Must use order_item_refunds.refund_amount_usd.
+      - Do not source refunds from orders or order_items directly.
+    assumptions:
+      - Each row in order_item_refunds represents one refund event for one order item.
+      - Refund attribution uses the refund event date (created_at), not the original order date.
+
+  - metric_id: net_revenue_after_refunds
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Net revenue after subtracting refunds from gross item revenue.
+      Computed as gross_item_revenue minus refund_amount, joined through order_item_id.
+    grain: item
+    components:
+      - gross_item_revenue
+      - refund_amount
+    formula: "SUM(order_items.price_usd) - COALESCE(SUM(order_item_refunds.refund_amount_usd), 0)"
+    time_field: order_items.created_at
+    allowed_dimensions:
+      - product_id
+    required_tables:
+      - order_items
+      - order_item_refunds
+    join_paths:
+      - "order_items LEFT JOIN order_item_refunds ON order_items.order_item_id = order_item_refunds.order_item_id"
+    alignment_rules:
+      - Refund amounts are attributed to the order item, not the original order date.
+      - Use LEFT JOIN so items without refunds are included at full price.
+      - COALESCE refund amount to 0 for items with no refund.
+    validation_rules:
+      - Must LEFT JOIN order_item_refunds to preserve items with no refund.
+      - Must use COALESCE to handle null refund amounts.
+      - Refund attribution policy is refund-event-date based.
+    assumptions:
+      - Refund attribution is by refund event date (order_item_refunds.created_at).
+      - Order date attribution is a separate, unsupported policy in this MVP.
+      - A single order item may have at most one refund row.
+
+  - metric_id: conversion_rate
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Percentage of website sessions that resulted in a completed order.
+      Denominator is distinct website sessions; numerator is distinct ordering sessions.
+    grain: session
+    components:
+      - sessions
+      - orders
+    formula: "COUNT(DISTINCT orders.website_session_id) / NULLIF(COUNT(DISTINCT website_sessions.website_session_id), 0)"
+    time_field: website_sessions.created_at
+    allowed_dimensions:
+      - utm_source
+      - utm_campaign
+      - device_type
+      - is_repeat_session
+    required_tables:
+      - website_sessions
+      - orders
+    join_paths:
+      - "website_sessions LEFT JOIN orders ON website_sessions.website_session_id = orders.website_session_id"
+    alignment_rules:
+      - Denominator must be all sessions, not only converting sessions.
+      - Use LEFT JOIN from website_sessions to orders so non-converting sessions are included.
+    validation_rules:
+      - Denominator must be COUNT(DISTINCT website_sessions.website_session_id).
+      - Numerator must be COUNT(DISTINCT orders.website_session_id).
+      - Must use LEFT JOIN from website_sessions to orders.
+      - Must use NULLIF to avoid division by zero.
+    assumptions:
+      - Conversion is defined as placing a completed order within the same session.
+      - Only converting sessions contribute to the numerator; all sessions contribute to the denominator.
+
+  - metric_id: revenue_per_session
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Average gross item revenue per website session.
+    grain: session
+    components:
+      - gross_item_revenue
+      - sessions
+    formula: "SUM(order_items.price_usd) / NULLIF(COUNT(DISTINCT website_sessions.website_session_id), 0)"
+    time_field: website_sessions.created_at
+    allowed_dimensions:
+      - utm_source
+      - utm_campaign
+      - device_type
+    required_tables:
+      - website_sessions
+      - order_items
+      - orders
+    join_paths:
+      - "website_sessions LEFT JOIN orders ON website_sessions.website_session_id = orders.website_session_id"
+      - "orders LEFT JOIN order_items ON orders.order_id = order_items.order_id"
+    alignment_rules:
+      - Denominator is all sessions; sessions with no order contribute 0 revenue.
+      - Join path must go through orders to reach order_items from website_sessions.
+    validation_rules:
+      - Denominator must be COUNT(DISTINCT website_sessions.website_session_id).
+      - Must traverse join path: website_sessions → orders → order_items.
+      - Must use NULLIF to avoid division by zero.
+    assumptions:
+      - Revenue is attributed to the session in which the order occurred.
+
+  - metric_id: profit_per_session
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Average gross profit per website session.
+    grain: session
+    components:
+      - gross_profit
+      - sessions
+    formula: "SUM(order_items.price_usd - order_items.cogs_usd) / NULLIF(COUNT(DISTINCT website_sessions.website_session_id), 0)"
+    time_field: website_sessions.created_at
+    allowed_dimensions:
+      - utm_source
+      - utm_campaign
+      - device_type
+    required_tables:
+      - website_sessions
+      - order_items
+      - orders
+    join_paths:
+      - "website_sessions LEFT JOIN orders ON website_sessions.website_session_id = orders.website_session_id"
+      - "orders LEFT JOIN order_items ON orders.order_id = order_items.order_id"
+    alignment_rules:
+      - Denominator is all sessions; sessions with no order contribute 0 profit.
+      - Join path must go through orders to reach order_items.
+    validation_rules:
+      - Must use order_items.cogs_usd for cost.
+      - Denominator must be COUNT(DISTINCT website_sessions.website_session_id).
+      - Must use NULLIF to avoid division by zero.
+    assumptions:
+      - Profit is attributed to the session in which the order occurred.
+
+  - metric_id: refund_rate
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Percentage of ordered items that were subsequently refunded.
+      Numerator is count of refunded order items; denominator is count of all order items sold.
+    grain: item
+    components:
+      - refund_amount
+      - items_sold
+    formula: "COUNT(DISTINCT order_item_refunds.order_item_id) / NULLIF(COUNT(order_items.order_item_id), 0)"
+    time_field: order_items.created_at
+    allowed_dimensions:
+      - product_id
+    required_tables:
+      - order_items
+      - order_item_refunds
+    join_paths:
+      - "order_items LEFT JOIN order_item_refunds ON order_items.order_item_id = order_item_refunds.order_item_id"
+    alignment_rules:
+      - Denominator is all items sold; items without a refund are included in denominator.
+    validation_rules:
+      - Numerator must be COUNT(DISTINCT order_item_refunds.order_item_id).
+      - Denominator must be COUNT(order_items.order_item_id) covering all sold items.
+      - Must use LEFT JOIN so items without refunds are included in denominator.
+      - Must use NULLIF to avoid division by zero.
+    assumptions:
+      - Refund rate is computed over order items, not over orders.
+      - A refund is counted once per order_item_id.
+
+  - metric_id: average_order_value
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Average revenue per completed order, computed at the order level.
+    grain: order
+    base_table: orders
+    formula: "SUM(price_usd) / NULLIF(COUNT(DISTINCT order_id), 0)"
+    time_field: created_at
+    allowed_dimensions:
+      - primary_product_id
+    required_tables:
+      - orders
+    validation_rules:
+      - Must use orders.price_usd for revenue.
+      - Must use COUNT(DISTINCT order_id) as denominator.
+      - Must use NULLIF to avoid division by zero.
+    assumptions:
+      - Computed at the order level, not the item level.
+      - Refunds are not deducted; this is a gross AOV.
+
+  - metric_id: items_per_order
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_definition: >
+      Average number of items purchased per completed order.
+    grain: order
+    components:
+      - items_sold
+      - orders
+    formula: "COUNT(order_items.order_item_id) / NULLIF(COUNT(DISTINCT orders.order_id), 0)"
+    time_field: orders.created_at
+    allowed_dimensions:
+      - primary_product_id
+    required_tables:
+      - orders
+      - order_items
+    join_paths:
+      - "orders JOIN order_items ON orders.order_id = order_items.order_id"
+    alignment_rules:
+      - Numerator is from order_items grain; denominator is from orders grain.
+      - Explicit grain alignment required when combining these tables.
+    validation_rules:
+      - Numerator must be COUNT(order_items.order_item_id).
+      - Denominator must be COUNT(DISTINCT orders.order_id).
+      - Must use NULLIF to avoid division by zero.
+    assumptions:
+      - An order with no matching order_items rows is excluded from numerator but included in denominator if INNER JOIN is used; prefer INNER JOIN only when order_items existence is guaranteed.
