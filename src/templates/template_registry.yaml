@@ -1,0 +1,274 @@
+version: "1"
+templates:
+
+  - template_id: conversion_by_channel
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_question: What is the conversion rate by traffic channel (utm_source / utm_campaign)?
+    description: >
+      Session-to-order conversion rate grouped by utm_source and utm_campaign.
+      Uses website_sessions as the denominator and LEFT JOINs orders so all sessions
+      are counted regardless of whether they converted.
+    sql_file: conversion_by_channel.sql
+    supported_metrics:
+      - sessions
+      - orders
+      - conversion_rate
+    required_tables:
+      - website_sessions
+      - orders
+    default_dimensions:
+      - utm_source
+      - utm_campaign
+    allowed_dimensions:
+      - utm_source
+      - utm_campaign
+      - utm_content
+    allowed_filters:
+      - start_date
+      - end_date
+    time_grains:
+      - day
+      - week
+      - month
+    parameters:
+      - name: start_date
+        required: true
+        type: date
+        description: "Start of date range (inclusive), format YYYY-MM-DD. Applied to website_sessions.created_at."
+      - name: end_date
+        required: true
+        type: date
+        description: "End of date range (exclusive), format YYYY-MM-DD. Applied to website_sessions.created_at."
+    required_join_paths:
+      - "website_sessions LEFT JOIN orders ON website_sessions.website_session_id = orders.website_session_id"
+    validation_rules:
+      - Denominator must be COUNT(DISTINCT website_sessions.website_session_id).
+      - Numerator must be COUNT(DISTINCT orders.website_session_id).
+      - Must use LEFT JOIN from website_sessions to orders so non-converting sessions are counted.
+      - Must use NULLIF to prevent division by zero.
+      - Date filter must be applied to website_sessions.created_at.
+    assumptions:
+      - Conversion is defined as a completed order attributed to the same session.
+      - Sessions without orders are included in the denominator but not the numerator.
+      - utm_source and utm_campaign are sourced from website_sessions.
+    fallback_behavior: Return empty result set with correct column headers if no rows match the date range.
+
+  - template_id: conversion_by_device
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_question: What is the conversion rate by device type?
+    description: >
+      Session-to-order conversion rate grouped by device_type.
+      Uses website_sessions as the denominator and LEFT JOINs orders so all sessions
+      are counted regardless of whether they converted.
+    sql_file: conversion_by_device.sql
+    supported_metrics:
+      - sessions
+      - orders
+      - conversion_rate
+    required_tables:
+      - website_sessions
+      - orders
+    default_dimensions:
+      - device_type
+    allowed_dimensions:
+      - device_type
+    allowed_filters:
+      - start_date
+      - end_date
+      - device_type
+    time_grains:
+      - day
+      - week
+      - month
+    parameters:
+      - name: start_date
+        required: true
+        type: date
+        description: "Start of date range (inclusive), format YYYY-MM-DD. Applied to website_sessions.created_at."
+      - name: end_date
+        required: true
+        type: date
+        description: "End of date range (exclusive), format YYYY-MM-DD. Applied to website_sessions.created_at."
+    required_join_paths:
+      - "website_sessions LEFT JOIN orders ON website_sessions.website_session_id = orders.website_session_id"
+    validation_rules:
+      - Denominator must be COUNT(DISTINCT website_sessions.website_session_id).
+      - Numerator must be COUNT(DISTINCT orders.website_session_id).
+      - Must use LEFT JOIN from website_sessions to orders so non-converting sessions are counted.
+      - Must use NULLIF to prevent division by zero.
+      - Date filter must be applied to website_sessions.created_at.
+      - device_type must be sourced from website_sessions, not orders.
+    assumptions:
+      - Conversion is defined as a completed order attributed to the same session.
+      - Sessions without orders are included in the denominator but not the numerator.
+      - device_type values present in the data are desktop, mobile, and tablet.
+    fallback_behavior: Return empty result set with correct column headers if no rows match the date range.
+
+  - template_id: revenue_by_campaign
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_question: What is revenue, order count, and AOV by utm_source and utm_campaign?
+    description: >
+      Order count, gross order revenue, and average order value grouped by utm_source
+      and utm_campaign. Uses INNER JOIN between website_sessions and orders so only
+      sessions that converted are counted. Revenue is sourced from orders.price_usd
+      and attributed to the session date (website_sessions.created_at).
+    sql_file: revenue_by_campaign.sql
+    supported_metrics:
+      - orders
+      - gross_order_revenue
+      - average_order_value
+    required_tables:
+      - website_sessions
+      - orders
+    default_dimensions:
+      - utm_source
+      - utm_campaign
+    allowed_dimensions:
+      - utm_source
+      - utm_campaign
+    allowed_filters:
+      - start_date
+      - end_date
+      - utm_source
+      - utm_campaign
+    time_grains:
+      - day
+      - week
+      - month
+    parameters:
+      - name: start_date
+        required: true
+        type: date
+        description: "Start of date range (inclusive), format YYYY-MM-DD. Applied to website_sessions.created_at."
+      - name: end_date
+        required: true
+        type: date
+        description: "End of date range (exclusive), format YYYY-MM-DD. Applied to website_sessions.created_at."
+    required_join_paths:
+      - "website_sessions JOIN orders ON website_sessions.website_session_id = orders.website_session_id"
+    validation_rules:
+      - Revenue must be sourced from orders.price_usd, not order_items.price_usd.
+      - Order count must be COUNT(DISTINCT orders.order_id) to prevent fan-out.
+      - Must use NULLIF to prevent division by zero in AOV.
+      - Date filter is applied to website_sessions.created_at (session acquisition date).
+    assumptions:
+      - Revenue attribution uses the session acquisition date (website_sessions.created_at), not the order creation date.
+      - This is an intentional policy choice. For order-date attribution, a separate template would be required.
+      - INNER JOIN is used here because the metric is revenue-per-campaign, not session-to-order rate.
+      - Sessions without orders are excluded (they contribute $0 revenue).
+      - Refunds are not deducted; this is gross order revenue.
+    fallback_behavior: Return empty result set with correct column headers if no rows match the date range.
+
+  - template_id: refund_rate_by_product
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_question: What is the refund rate and refund amount by product?
+    description: >
+      Items sold, refunded item count, refund rate, and total refund amount grouped by
+      product_id and product_name. Base table is order_items. Refunds are LEFT JOINed
+      via order_item_id from order_item_refunds. Products are INNER JOINed for product_name.
+      Refund attribution uses the order item sale date (order_items.created_at).
+    sql_file: refund_rate_by_product.sql
+    supported_metrics:
+      - items_sold
+      - refund_amount
+      - refund_rate
+    required_tables:
+      - order_items
+      - order_item_refunds
+      - products
+    default_dimensions:
+      - product_id
+      - product_name
+    allowed_dimensions:
+      - product_id
+      - product_name
+    allowed_filters:
+      - start_date
+      - end_date
+      - product_id
+    time_grains:
+      - day
+      - week
+      - month
+    parameters:
+      - name: start_date
+        required: true
+        type: date
+        description: "Start of date range (inclusive), format YYYY-MM-DD. Applied to order_items.created_at."
+      - name: end_date
+        required: true
+        type: date
+        description: "End of date range (exclusive), format YYYY-MM-DD. Applied to order_items.created_at."
+    required_join_paths:
+      - "order_items LEFT JOIN order_item_refunds ON order_items.order_item_id = order_item_refunds.order_item_id"
+      - "order_items JOIN products ON order_items.product_id = products.product_id"
+    validation_rules:
+      - Base table must be order_items, not orders.
+      - Refund data must come from order_item_refunds via LEFT JOIN on order_item_id.
+      - Denominator must be COUNT(order_items.order_item_id) covering all sold items.
+      - Numerator must be COUNT(order_item_refunds.order_item_id) for refunded items only.
+      - Must use LEFT JOIN to preserve items with no refund in the denominator.
+      - Must use NULLIF to prevent division by zero.
+      - Must use COALESCE for refund_amount to return 0 when no refund exists.
+      - website_pageviews must not be used.
+    assumptions:
+      - Refund attribution is based on the item sale date (order_items.created_at), not the refund event date.
+      - A given order_item_id has at most one corresponding row in order_item_refunds.
+      - Products JOIN is INNER JOIN; order_items rows with no matching product are excluded.
+      - Refund rate is computed at the item grain, not the order grain.
+    fallback_behavior: Return empty result set with correct column headers if no rows match the date range.
+
+  - template_id: monthly_revenue_trend
+    version: "1.0"
+    owner: analytics
+    status: approved
+    business_question: What is the monthly trend of orders, revenue, and AOV?
+    description: >
+      Monthly aggregation of order count, gross order revenue, and average order value.
+      Base table is orders, grouped by calendar month. Time grain is fixed at month for this MVP template.
+    sql_file: monthly_revenue_trend.sql
+    supported_metrics:
+      - orders
+      - gross_order_revenue
+      - average_order_value
+    required_tables:
+      - orders
+    default_dimensions:
+      - month
+    allowed_dimensions:
+      - month
+    allowed_filters:
+      - start_date
+      - end_date
+    time_grains:
+      - month
+    parameters:
+      - name: start_date
+        required: true
+        type: date
+        description: "Start of date range (inclusive), format YYYY-MM-DD. Applied to orders.created_at."
+      - name: end_date
+        required: true
+        type: date
+        description: "End of date range (exclusive), format YYYY-MM-DD. Applied to orders.created_at."
+    required_join_paths: []
+    validation_rules:
+      - Revenue must be sourced from orders.price_usd.
+      - Order count must be COUNT(DISTINCT orders.order_id).
+      - Time truncation must be at the month grain using DATE_TRUNC.
+      - Must use NULLIF to prevent division by zero in AOV.
+      - Date filter must be applied to orders.created_at.
+      - website_pageviews must not be used.
+    assumptions:
+      - Revenue attribution is by order creation date (orders.created_at).
+      - Time grain is fixed at month for this template; a separate template is required for daily or weekly trends.
+      - Refunds are not deducted; this is gross order revenue.
+    fallback_behavior: Return empty result set with correct column headers if no rows match the date range.

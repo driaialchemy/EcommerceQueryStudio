@@ -171,9 +171,41 @@ To validate all metric contracts:
 python -m pytest tests/test_metric_registry.py
 ```
 
+## Stage 5: SQL Template Registry and Renderer
+
+Template contracts live in `src/templates/template_registry.yaml`. SQL files live in `src/templates/sql_templates/`.
+
+Free-form SQL generation is out of scope. Every query must be backed by a versioned, approved template contract.
+
+Each template declares its `template_id`, `version`, `owner`, `business_question`, `supported_metrics`, `required_tables`, `required_join_paths`, `parameters`, `validation_rules`, `assumptions`, and `status`. Templates consume metric contracts defined in Stage 4 (`src/semantic_layer/metrics.yaml`).
+
+The five approved MVP templates are:
+
+| Template ID | Business Question | Key Tables |
+| --- | --- | --- |
+| `conversion_by_channel` | Conversion rate by utm_source / utm_campaign | `website_sessions` LEFT JOIN `orders` |
+| `conversion_by_device` | Conversion rate by device type | `website_sessions` LEFT JOIN `orders` |
+| `revenue_by_campaign` | Revenue and AOV by utm_source / utm_campaign | `website_sessions` JOIN `orders` |
+| `refund_rate_by_product` | Refund rate and refund amount by product | `order_items` LEFT JOIN `order_item_refunds`, JOIN `products` |
+| `monthly_revenue_trend` | Monthly orders, revenue, and AOV trend | `orders` |
+
+`src/templates/template_loader.py` provides:
+
+- `load_template_registry` — loads all contracts from YAML, keyed by `template_id`
+- `list_templates` — returns a sorted list of all template IDs
+- `get_template` — retrieves one contract by ID, raises `KeyError` if unknown
+- `validate_template_contract` — validates a single contract dict against required fields
+- `validate_all_template_contracts` — validates every contract in the registry
+- `get_template_sql` — loads the raw SQL string from the declared SQL file
+- `validate_template_parameters` — validates a parameter dict against the template contract (required fields, unknown params, date format, enum values)
+- `render_template_sql` — validates parameters then substitutes named placeholders in the SQL; SQL fragments are never accepted
+
+Parameters are validated before substitution. Only declared parameters are accepted. Dates must be `YYYY-MM-DD`. Enum fields are checked against declared `allowed_values`. Arbitrary SQL fragments are rejected.
+
+Stage 6 will connect these templates into the runtime question-answering pipeline.
+
 ## Current Limitations
 
-- No SQL templates are implemented yet.
 - No runtime question-answering path exists yet.
 - No Streamlit UI exists yet.
 - No tracing integration exists yet.
