@@ -1,0 +1,103 @@
+eval_cases:
+
+  # --- Supported questions ---
+
+  - id: supported_conversion_by_channel
+    question: "What is the conversion rate by channel?"
+    expected_status: "ok"
+    expected_route_type: "template"
+    expected_template_id: "conversion_by_channel"
+    should_execute_sql: true
+    expected_validation_status: "passed"
+
+  - id: supported_conversion_by_device
+    question: "What is the conversion rate by device type?"
+    expected_status: "ok"
+    expected_route_type: "template"
+    expected_template_id: "conversion_by_device"
+    should_execute_sql: true
+    expected_validation_status: "passed"
+
+  - id: supported_revenue_by_campaign
+    question: "What is revenue by campaign?"
+    expected_status: "ok"
+    expected_route_type: "template"
+    expected_template_id: "revenue_by_campaign"
+    should_execute_sql: true
+    expected_validation_status: "passed"
+
+  - id: supported_refund_rate_by_product
+    question: "What is the refund rate by product?"
+    expected_status: "ok"
+    expected_route_type: "template"
+    expected_template_id: "refund_rate_by_product"
+    should_execute_sql: true
+    expected_validation_status: "passed"
+
+  - id: supported_monthly_revenue_trend
+    question: "What is the monthly revenue trend?"
+    expected_status: "ok"
+    expected_route_type: "template"
+    expected_template_id: "monthly_revenue_trend"
+    should_execute_sql: true
+    expected_validation_status: "passed"
+
+  # --- Clarify questions ---
+
+  - id: clarify_best_channel
+    question: "What is the best channel?"
+    expected_status: "clarify"
+    expected_route_type: "clarify"
+    expected_template_id: null
+    should_execute_sql: false
+    expected_validation_status: null
+
+  - id: clarify_campaign_performance
+    question: "Which campaign has the best performance?"
+    expected_status: "clarify"
+    expected_route_type: "clarify"
+    expected_template_id: null
+    should_execute_sql: false
+    expected_validation_status: null
+
+  - id: clarify_most_profitable_segment
+    question: "What is the most profitable segment?"
+    expected_status: "clarify"
+    expected_route_type: "clarify"
+    expected_template_id: null
+    should_execute_sql: false
+    expected_validation_status: null
+
+  # --- Unsupported questions ---
+
+  - id: unsupported_customer_lifetime_value
+    question: "Show me customer lifetime value."
+    expected_status: "unsupported"
+    expected_route_type: "unsupported"
+    expected_template_id: null
+    should_execute_sql: false
+    expected_validation_status: null
+
+  - id: unsupported_predict_revenue
+    question: "Predict next month's revenue."
+    expected_status: "unsupported"
+    expected_route_type: "unsupported"
+    expected_template_id: null
+    should_execute_sql: false
+    expected_validation_status: null
+
+  - id: unsupported_marketing_strategy
+    question: "Write a marketing strategy for gsearch."
+    expected_status: "unsupported"
+    expected_route_type: "unsupported"
+    expected_template_id: null
+    should_execute_sql: false
+    expected_validation_status: null
+
+  - id: unsupported_raw_pageviews
+    question: "List every raw pageview."
+    expected_status: "unsupported"
+    expected_route_type: "unsupported"
+    expected_template_id: null
+    should_execute_sql: false
+    expected_validation_status: null
