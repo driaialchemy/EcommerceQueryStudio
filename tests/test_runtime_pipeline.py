@@ -177,9 +177,32 @@ def test_pipeline_unsupported_does_not_execute_sql(monkeypatch):
     assert executed == [], "SQL must not be executed for unsupported route"
 
 
-def test_pipeline_response_has_validation_status():
+def test_pipeline_clarify_validation_status_not_applicable():
+    result = answer_question("Which is the best channel?")
+    assert result["validation_status"] == "not_applicable"
+    assert result["validation"] is None
+
+
+def test_pipeline_unsupported_validation_status_not_applicable():
     result = answer_question("How many employees do we have?")
-    assert result["validation_status"] == "not_implemented_stage_7"
+    assert result["validation_status"] == "not_applicable"
+    assert result["validation"] is None
+
+
+def test_pipeline_template_answer_includes_validation_status(monkeypatch):
+    monkeypatch.setattr("src.runtime.pipeline.render_template_sql", lambda tid, params, **kw: "SELECT 1")
+    monkeypatch.setattr("src.runtime.pipeline.execute_sql", lambda sql, db_path=None: [])
+    result = answer_question("Show conversion rate by channel")
+    assert result["validation_status"] in ("passed", "failed")
+
+
+def test_pipeline_template_answer_includes_validation_object(monkeypatch):
+    monkeypatch.setattr("src.runtime.pipeline.render_template_sql", lambda tid, params, **kw: "SELECT 1")
+    monkeypatch.setattr("src.runtime.pipeline.execute_sql", lambda sql, db_path=None: [])
+    result = answer_question("Show conversion rate by channel")
+    assert isinstance(result["validation"], dict)
+    assert "status" in result["validation"]
+    assert "checks" in result["validation"]
 
 
 # ---------------------------------------------------------------------------

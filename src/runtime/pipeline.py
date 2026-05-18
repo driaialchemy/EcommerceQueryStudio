@@ -7,6 +7,7 @@ from pathlib import Path
 from src.runtime.executor import DEFAULT_DB_PATH, execute_sql
 from src.runtime.router import route_question
 from src.templates.template_loader import get_template, render_template_sql
+from src.validation.validators import validate_result
 
 
 def answer_question(
@@ -49,7 +50,8 @@ def answer_question(
             "row_count": None,
             "rows": None,
             "assumptions": [],
-            "validation_status": "not_implemented_stage_7",
+            "validation_status": "not_applicable",
+            "validation": None,
             "reason": route["reason"],
         }
 
@@ -63,7 +65,8 @@ def answer_question(
             "row_count": None,
             "rows": None,
             "assumptions": [],
-            "validation_status": "not_implemented_stage_7",
+            "validation_status": "not_applicable",
+            "validation": None,
             "reason": route["reason"],
         }
 
@@ -76,6 +79,8 @@ def answer_question(
     sql = render_template_sql(template_id, merged_params)
     rows = execute_sql(sql, db_path=db_path)
 
+    validation = validate_result(template_id, rows, merged_params)
+
     return {
         "status": "ok",
         "route_type": route_type,
@@ -85,6 +90,7 @@ def answer_question(
         "row_count": len(rows),
         "rows": rows,
         "assumptions": assumptions,
-        "validation_status": "not_implemented_stage_7",
+        "validation_status": validation["status"],
+        "validation": validation,
         "reason": route["reason"],
     }
