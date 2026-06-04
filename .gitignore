@@ -31,6 +31,6 @@ data/processed/*
 # Local output artifacts
 *.log
 *.tmp
+data/audit/
 .DS_Store
 Thumbs.db
-
