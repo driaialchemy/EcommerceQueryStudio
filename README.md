@@ -4,6 +4,27 @@ This project is the initial scaffold for a governed analytics application using 
 
 This is not a general CSV chatbot. The MVP should only answer supported business questions through governed metrics and approved templates.
 
+## For A Novice Reader
+
+This app is a business analytics dashboard for an ecommerce dataset. Instead of
+letting the computer invent any SQL it wants, it answers a short list of approved
+questions, such as conversion by channel, conversion by device, revenue by
+campaign, refund rate by product, and monthly revenue trend.
+
+The goal is to make analytics safer and easier to trust: every answer comes from
+a known template, shows the data table, explains the assumptions, and records an
+audit trail.
+
+## For A Technical Reader
+
+The project implements a governed natural-language-to-analytics path over local
+DuckDB data. A deterministic router maps supported questions to YAML-registered
+SQL templates and metric contracts, validates date parameters, renders
+parameterized SQL, executes read-only DuckDB queries, validates result shape and
+metric ranges, explains the answer deterministically, and writes JSONL audit
+events. The Streamlit dashboard wraps that same runtime with guided templates,
+custom governed questions, charts, validation details, and data readiness checks.
+
 ## Dataset
 
 The Maven Fuzzy Factory dataset contains ecommerce sessions, pageviews, orders, order items, refunds, products, and a data dictionary.
