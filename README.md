@@ -69,7 +69,6 @@ Out of scope for the initial scaffold:
 
 - General CSV chatbot behavior
 - LangGraph workflows
-- Streamlit UI implementation
 - Free-form SQL generation or execution
 - Prompt-only metric definitions
 
@@ -116,6 +115,28 @@ Run tests from the project root:
 ```bash
 python -m pytest
 ```
+
+## Streamlit Dashboard
+
+The repository includes a Streamlit interface for the approved analytics templates.
+It uses the same governed runtime as the tests: natural-language routing,
+parameter validation, SQL template rendering, DuckDB execution, result
+validation, deterministic explanation, and audit logging.
+
+Launch it from the project root:
+
+```bash
+python -m streamlit run app/dashboard.py --server.port 8512
+```
+
+The dashboard supports:
+
+- Guided runs for the five approved templates.
+- Custom governed questions that still route through the deterministic template matcher.
+- Date range controls using the approved `start_date` and `end_date` parameters.
+- Data readiness checks for raw CSV files and the processed DuckDB database.
+- One-click DuckDB build when all required raw CSVs are present and the database is missing.
+- KPI summaries, template-aware charts, result tables, validation checks, assumptions, rendered SQL, and audit status.
 
 ## Stage 3: Schema and Data Dictionary Registry
 
@@ -206,8 +227,6 @@ Stage 6 will connect these templates into the runtime question-answering pipelin
 
 ## Current Limitations
 
-- No runtime question-answering path exists yet.
-- No Streamlit UI exists yet.
+- Runtime answers are limited to the approved template set.
 - No tracing integration exists yet.
 - Local CSVs must be supplied separately in `data/raw/`.
-
