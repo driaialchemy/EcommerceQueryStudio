@@ -127,3 +127,15 @@ Work is done when:
 - `python -m pytest` passes.
 - Documentation is updated when architecture, metric policy, data placement, or run commands change.
 
+
+# Audit remediation metadata
+audit_path: audit/multi_repo/2026-09-18/repo_mavenfuzzyfactory_20260918T004904Z.json
+risk_level: MEDIUM
+human_review_required: false
+audit_findings:
+  - "Risk level is MEDIUM, expected LOW."
+  - "Dependency manifests present: pyproject.toml"
+  - "CI/CD workflow configuration present (.github/workflows)."
+  - "HTTP networking libraries in use: requests"
+  - "Test suite present — actively developed project."
+
