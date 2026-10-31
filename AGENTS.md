@@ -139,3 +139,12 @@ audit_findings:
   - "HTTP networking libraries in use: requests"
   - "Test suite present — actively developed project."
 
+## Approval gates
+
+Human approval is required before dependency changes, external-call changes, deploy or container config, secrets, and AI-provider or database config.
+
+## Setup
+
+pip install -e ".[dev]"
+python -m pytest -q
+

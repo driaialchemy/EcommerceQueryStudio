@@ -34,3 +34,9 @@ data/processed/*
 .DS_Store
 Thumbs.db
 
+
+# governance baseline ignores
+node_modules/
+reports/
+audit_temp/
+generated/
